@@ -1,6 +1,6 @@
-# sentinelx-protocol
+# sentinelx-cloud-protocol
 
-Contrato compartido entre `sentinelx-core` (agente en el servidor del usuario) y `sentinelx-hub` (servicio en la nube de pensainfra).
+Contrato compartido entre `sentinelx-cloud-core` (agente en el servidor del usuario) y `sentinelx-cloud-hub` (servicio en la nube de pensainfra).
 
 Este repo es la **fuente de verdad** del protocolo WebSocket que conecta ambos componentes. No contiene lógica — solo specs, schemas y bindings tipados que ambas partes importan.
 
@@ -24,7 +24,7 @@ La versión actual está declarada en `python/sentinelx_protocol/__init__.py` co
 ## Uso desde otro proyecto
 
 ```bash
-pip install "git+https://github.com/pensados/sentinelx-protocol.git@v1.0.0"
+pip install "git+https://github.com/pensados/sentinelx-cloud-protocol.git@v1.0.0"
 ```
 
 ```python

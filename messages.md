@@ -41,7 +41,7 @@ El core se autentica con un **enrollment token** (JWT firmado por el hub durante
 
 Claims requeridas en el JWT:
 
-- `iss`: `sentinelx-hub`
+- `iss`: `sentinelx-cloud-hub`
 - `sub`: `user_id` (del Keycloak/Google del usuario)
 - `host_id`: identificador único del host (generado en la instalación)
 - `iat`, `exp`: estándar

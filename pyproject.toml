@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "sentinelx-protocol"
+name = "sentinelx-cloud-protocol"
 version = "1.0.0"
 description = "SentinelX wire protocol — shared contract between core and hub"
 readme = "README.md"
