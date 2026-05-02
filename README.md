@@ -1,110 +1,159 @@
 # sentinelx-cloud-protocol
 
-The wire format shared between [`sentinelx-cloud-core`](https://github.com/pensados/sentinelx-cloud-core) (the agent on a user's server) and the SentinelX hub.
+The wire format shared between [`sentinelx-cloud-core`](https://github.com/pensados/sentinelx-cloud-core)
+(the agent on your server) and the SentinelX hub.
 
-This repo is the source of truth for the WebSocket protocol. It contains no business logic — only the spec, JSON schemas, and typed bindings that both sides import.
+This repo is the source of truth for the WebSocket protocol. It contains no
+business logic — only the spec, JSON schemas, and typed Python bindings that
+both sides import.
 
----
+## Why a separate repo
 
-## What's in here
+The agent is open source. The hub is closed source. They have to agree on
+the wire format. Pinning that contract here means:
 
-- **`messages.md`** — prose specification of the protocol (read this first if you want to understand it)
-- **`schemas/`** — JSON Schemas for each message type
-- **`python/`** — Python bindings as Pydantic v2 models
-- **`CHANGELOG.md`** — semantic version history
+- Both sides import from a single versioned source
+- Third parties can build alternate hubs or agents that interoperate
+- Schema changes go through a real review process — they're a public artifact
 
----
-
-## Quick reference
-
-The protocol is a small set of typed JSON messages exchanged over a single WebSocket connection per agent.
+## Architecture
 
 ```
-Agent → Hub                  Hub → Agent
-─────────────                ─────────────
-HelloMessage      ────▶
-                  ◀────      WelcomeMessage
-PongMessage       ────▶      PingMessage    (heartbeat, ~every 30s)
-ResponseMessage   ◀────      RequestMessage (op invocation)
-EventMessage      ────▶                     (unsolicited notifications)
-                  ◀────      ErrorMessage   (protocol-level errors)
+   ┌─────────────────┐                   ┌──────────────────┐
+   │  agent          │  WebSocket        │  hub             │
+   │ (cloud-core)    │ ◄──── + JWT ────► │ (mcp.sentinelx)  │
+   │                 │   request msgs    │                  │
+   │                 │   reply msgs      │                  │
+   └─────────────────┘                   └──────────────────┘
+        ▲                                        ▲
+        │                                        │
+        └──── both import sentinelx_protocol ────┘
 ```
 
-A typical session:
+## Wire format
 
-1. Agent connects to `wss://hub/agent/connect?token=<enrollment_jwt>`
-2. Hub validates the JWT, replies on success — agent sends `HelloMessage` declaring its `protocol_version`, capabilities, and host info
-3. Hub responds with `WelcomeMessage` echoing accepted heartbeat interval and session id
-4. From here on: hub sends `RequestMessage`, agent runs the op, agent sends back `ResponseMessage` with matching `request_id`
-5. Hub periodically sends `PingMessage`, agent replies `PongMessage`. Either side disconnects after `HEARTBEAT_TIMEOUT_SECONDS` of silence.
+A single WebSocket per agent. Messages are JSON with a `type` discriminator.
 
----
+### Request (hub → agent)
+
+```json
+{
+  "type": "request",
+  "id": "req_abc123",
+  "op": "exec",
+  "payload": {
+    "cmd": "uptime"
+  }
+}
+```
+
+### Reply (agent → hub)
+
+```json
+{
+  "type": "reply",
+  "id": "req_abc123",
+  "ok": true,
+  "result": {
+    "stdout": "...",
+    "stderr": "",
+    "rc": 0,
+    "duration_ms": 4
+  }
+}
+```
+
+### Handshake (agent → hub, first message)
+
+```json
+{
+  "type": "hello",
+  "agent_version": "0.1.0",
+  "protocol_version": "1.0",
+  "host": {
+    "hostname": "my-vps",
+    "os": "linux",
+    "arch": "x86_64"
+  },
+  "capabilities": ["exec", "edit", "service", "upload"],
+  "identity_token": "eyJ..."
+}
+```
+
+The `identity_token` is a JWT issued by the hub at enrollment time, signed
+with RS256. Claims: `iss=sentinelx-hub`, `sub=<user_id>`, `host_id=<...>`,
+`iat`, `exp`. The hub validates this against its own private key.
+
+## Operations
+
+| `op` | Payload | Reply `result` |
+|---|---|---|
+| `ping` | `{}` | `{"pong": true}` |
+| `capabilities` | `{}` | `{"exec": [...], "services": [...], ...}` |
+| `help` | `{}` | `{"text": "..."}` |
+| `state` | `{}` | Agent runtime state |
+| `exec` | `{"cmd": "..."}` | `{"stdout", "stderr", "rc", "duration_ms"}` |
+| `script_run` | `{"interpreter", "content", ...}` | Same as `exec` |
+| `service` | `{"name", "action"}` | Same as `exec` |
+| `restart` | `{"name"}` | Same as `exec` |
+| `edit` | `{"path", "mode", "old", "new_text", ...}` | `{"changes": N, "backup": "..."}` |
+| `edit_upload_init` | `{}` | `{"upload_id"}` |
+| `edit_upload_file` | `{"upload_id", "role", "data"}` | `{"ok": true}` |
+| `edit_upload_complete` | `{"upload_id", "path", "mode", ...}` | Same as `edit` |
+| `upload_file` | `{"target_path", "content_base64", ...}` | `{"path", "size_bytes", "sha256"}` |
+| `upload_init` | `{"target_path", "size_bytes"}` | `{"upload_id"}` |
+| `upload_chunk` | `{"upload_id", "offset", "data"}` | `{"received_bytes"}` |
+| `upload_complete` | `{"upload_id"}` | `{"path", "size_bytes", "sha256"}` |
+
+## Python bindings
+
+```python
+from sentinelx_protocol import RequestMessage, ReplyMessage, HelloMessage
+
+# Validate an incoming message
+msg = RequestMessage.model_validate_json(raw_text)
+
+# Build a reply
+reply = ReplyMessage(id=msg.id, ok=True, result={"stdout": "..."})
+ws.send(reply.model_dump_json())
+```
+
+Bindings are `pydantic` models with strict validation. Both agent and hub
+import them from PyPI (TBD) or directly from a git tag.
 
 ## Versioning
 
-The protocol uses [SemVer](https://semver.org/):
+The `protocol_version` in the handshake follows semver. The hub negotiates:
 
-- **MAJOR** — breaking change (an old core can't talk to a new hub)
-- **MINOR** — additive change (new optional fields, new message types). Backward compatible.
-- **PATCH** — doc clarifications, schema fixes with no functional change
+- **Same major** — fully compatible
+- **Different minor** — best-effort, hub may degrade unsupported features
+- **Different major** — connection refused
 
-The current version is exposed as `PROTOCOL_VERSION` in `sentinelx_protocol/__init__.py`.
+Today we're on `1.0`. The first incompatible change ships as `2.0`.
 
-The hub accepts any MINOR within its current MAJOR. When a core handshakes with a different MAJOR, the hub rejects it with `code: protocol_version_mismatch` and tells the core to upgrade.
+## Auth boundary
 
----
+The protocol carries an opaque `identity_token`. The token format and
+validation are NOT part of this protocol — they're the hub's responsibility.
+This repo only specifies that:
 
-## Use it from another project
+- The hello message includes a string field `identity_token`
+- The hub may close the connection with code `4001` ("auth failed") at any
+  time
 
-```bash
-pip install "git+https://github.com/pensados/sentinelx-cloud-protocol.git@v1.0.0"
-```
+A reference token format is documented in
+[`docs/auth.md`](docs/auth.md) (current: RS256 JWT, claims as above).
 
-```python
-from sentinelx_protocol import (
-    PROTOCOL_VERSION,
-    HelloMessage, HostInfo,
-    RequestMessage, ResponseMessage,
-    parse_message,
-)
+## Schemas
 
-# Construct a hello at the start of a connection
-hello = HelloMessage(
-    protocol_version=PROTOCOL_VERSION,
-    agent_version="0.1.0",
-    host=HostInfo(id="host_abc123", hostname="my-server"),
-    capabilities=["ping", "exec", "state"],
-)
+JSON Schema for every message type is in `schemas/`. Useful if you're
+building an agent or hub in a non-Python language.
 
-# Parse anything that comes off the wire
-incoming = parse_message(json.loads(raw_text))
-match incoming:
-    case RequestMessage(op="exec", payload=p):
-        ...
-```
+## Related
 
----
-
-## Constants
-
-| Name | Value | Meaning |
-|---|---|---|
-| `PROTOCOL_VERSION` | `1.0.0` | Current SemVer string |
-| `PROTOCOL_MAJOR` | `1` | Current major (compatibility boundary) |
-| `MAX_FRAME_BYTES` | `1_048_576` | 1 MB hard cap on a single WS frame |
-| `RECOMMENDED_CHUNK_BYTES` | `262_144` | 256 KB suggested chunk size for streaming uploads |
-| `HEARTBEAT_INTERVAL_SECONDS` | `30` | How often hub sends ping |
-| `HEARTBEAT_TIMEOUT_SECONDS` | `90` | When to consider the peer dead |
-
----
-
-## Related repos
-
-- [`sentinelx-cloud-core`](https://github.com/pensados/sentinelx-cloud-core) — the agent
-- [`sentinelx-cloud-installer`](https://github.com/pensados/sentinelx-cloud-installer) — one-line installer
-
----
+- [`sentinelx-cloud-core`](https://github.com/pensados/sentinelx-cloud-core) — reference agent implementation
+- [`sentinelx-cloud-installer`](https://github.com/pensados/sentinelx-cloud-installer) — installer for `sentinelx-cloud-core`
 
 ## License
 
-Apache 2.0. See [`LICENSE`](./LICENSE).
+Apache 2.0
