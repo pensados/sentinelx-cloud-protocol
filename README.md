@@ -75,7 +75,7 @@ A single WebSocket per agent. Messages are JSON with a `type` discriminator.
     "os": "linux",
     "arch": "x86_64"
   },
-  "capabilities": ["exec", "edit", "service", "upload"],
+  "capabilities": ["exec", "edit", "service", "upload", "read", "list", "search"],
   "identity_token": "eyJ..."
 }
 ```
@@ -104,6 +104,16 @@ with RS256. Claims: `iss=sentinelx-hub`, `sub=<user_id>`, `host_id=<...>`,
 | `upload_init` | `{"target_path", "size_bytes"}` | `{"upload_id"}` |
 | `upload_chunk` | `{"upload_id", "offset", "data"}` | `{"received_bytes"}` |
 | `upload_complete` | `{"upload_id"}` | `{"path", "size_bytes", "sha256"}` |
+| `read` | `{"path", "view_range"?, "max_bytes"?}` | `{"content", "encoding", "size_bytes", "total_lines", ...}` |
+| `list` | `{"path", "depth"?, "glob"?, "show_hidden"?}` | `{"entries": [...], "total", "truncated"}` |
+| `search` | `{"path", "pattern", "regex"?, "file_glob"?, ...}` | `{"matches": [...], "files_searched", "truncated"}` |
+
+`read`, `list`, and `search` are read-only filesystem primitives. Unlike
+`exec` (gated by a command allowlist) they're gated on the agent side by a
+**path allowlist** (`file_ops_allowed_read_paths` in the agent's config).
+Implementations live in
+[`sentinelx-cloud-core`](https://github.com/pensados/sentinelx-cloud-core)
+under `handlers/fileops.py`; see that repo's README for the security model.
 
 ## Python bindings
 
