@@ -31,6 +31,11 @@ OpType = Literal[
     "upload_chunk",
     "upload_complete",
     "upload_file",
+    # File primitives (Story 6) — read-only filesystem ops constrained by
+    # policy.file_ops_allowed_read_paths on the agent side.
+    "read",
+    "list",
+    "search",
 ]
 
 
