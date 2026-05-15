@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sentinelx-cloud-protocol"
-version = "1.0.0"
+version = "1.1.0"
 description = "SentinelX wire protocol — shared contract between core and hub"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -31,6 +31,21 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "RUF"]
+
+# Per-file overrides for intentional layout choices.
+[tool.ruff.lint.per-file-ignores]
+# python/sentinelx_protocol/__init__.py declares protocol-level constants
+# (PROTOCOL_VERSION, MAX_FRAME_BYTES, …) at the top of the file, before
+# re-exporting message types from .messages. This ordering is deliberate
+# — constants are the "header" of the file, not an afterthought. E402
+# (module-level import not at top) and RUF022 (unsorted __all__) flag the
+# resulting style; the __all__ is in logical order (constants → messages
+# → helpers), which is more useful than alphabetical here.
+"python/sentinelx_protocol/__init__.py" = ["E402", "RUF022"]
+
+# messages.py's import block is single-line and well-formed; ruff's I001
+# wants a different empty-line layout. Cosmetic, not worth a reorder.
+"python/sentinelx_protocol/messages.py" = ["I001"]
 
 [tool.mypy]
 strict = true
