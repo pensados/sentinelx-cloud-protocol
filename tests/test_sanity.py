@@ -40,3 +40,39 @@ def test_message_ops_include_filesystem_primitives() -> None:
 
     for required in ("read", "list", "search"):
         assert required in ops, f"OpType is missing '{required}'"
+
+
+def test_message_ops_include_mutating_filesystem_ops() -> None:
+    """The OpType Literal must include the unified file-ops mutating ops.
+
+    These are gated on the agent side by the file_ops r/rw path model
+    (they only resolve under an access: rw path). This test guards
+    against a refactor silently dropping one of them from the wire
+    contract — which would make the corresponding hub tool undeliverable.
+    """
+    from typing import get_args
+
+    from sentinelx_protocol.messages import RequestMessage
+
+    op_field = RequestMessage.model_fields["op"]
+    ops = set(get_args(op_field.annotation))
+
+    for required in ("move", "copy", "delete", "chmod", "chown"):
+        assert required in ops, f"OpType is missing '{required}'"
+
+
+def test_request_message_parses_new_ops() -> None:
+    """A RequestMessage with each new op must validate cleanly.
+
+    payload stays an open dict[str, Any] by design (each side validates
+    its own shape), so here we only assert the op string is accepted by
+    the Literal and the envelope round-trips through the generic parser.
+    """
+    from sentinelx_protocol.messages import RequestMessage, parse_message
+
+    for op in ("move", "copy", "delete", "chmod", "chown"):
+        msg = RequestMessage(id="req-1", op=op, payload={"path": "/tmp/x"})
+        assert msg.op == op
+        parsed = parse_message(msg.model_dump(mode="json"))
+        assert isinstance(parsed, RequestMessage)
+        assert parsed.op == op
