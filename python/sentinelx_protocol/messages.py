@@ -32,10 +32,22 @@ OpType = Literal[
     "upload_complete",
     "upload_file",
     # File primitives (Story 6) — read-only filesystem ops constrained by
-    # policy.file_ops_allowed_read_paths on the agent side.
+    # the file_ops path model on the agent side. With the unified r/rw
+    # model these resolve under any file_ops path (r or rw).
     "read",
     "list",
     "search",
+    # Mutating filesystem ops (file-ops unificadas). These resolve ONLY
+    # under a file_ops path declared access: rw on the agent side. The
+    # agent canonicalizes the path (symlinks included) before checking,
+    # so a hostile hub/LLM cannot escape the rw allowlist. Destructive
+    # ops (delete, and move/copy that overwrite a destination) take an
+    # automatic timestamped backup before mutating.
+    "move",
+    "copy",
+    "delete",
+    "chmod",
+    "chown",
 ]
 
 
