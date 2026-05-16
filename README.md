@@ -75,7 +75,7 @@ A single WebSocket per agent. Messages are JSON with a `type` discriminator.
     "os": "linux",
     "arch": "x86_64"
   },
-  "capabilities": ["exec", "edit", "service", "upload", "read", "list", "search"],
+  "capabilities": ["exec", "edit", "service", "upload", "read", "list", "search", "move", "copy", "delete", "chmod", "chown"],
   "identity_token": "eyJ..."
 }
 ```
@@ -107,13 +107,22 @@ with RS256. Claims: `iss=sentinelx-hub`, `sub=<user_id>`, `host_id=<...>`,
 | `read` | `{"path", "view_range"?, "max_bytes"?}` | `{"content", "encoding", "size_bytes", "total_lines", ...}` |
 | `list` | `{"path", "depth"?, "glob"?, "show_hidden"?}` | `{"entries": [...], "total", "truncated"}` |
 | `search` | `{"path", "pattern", "regex"?, "file_glob"?, ...}` | `{"matches": [...], "files_searched", "truncated"}` |
+| `move` | `{"src", "dst", ...}` | `{"src", "dst", "backup"?}` |
+| `copy` | `{"src", "dst", ...}` | `{"src", "dst", "backup"?}` |
+| `delete` | `{"path", ...}` | `{"path", "backup"}` |
+| `chmod` | `{"path", "mode"}` | `{"path", "mode"}` |
+| `chown` | `{"path", "owner"?, "group"?}` | `{"path", "owner", "group"}` |
 
-`read`, `list`, and `search` are read-only filesystem primitives. Unlike
-`exec` (gated by a command allowlist) they're gated on the agent side by a
-**path allowlist** (`file_ops_allowed_read_paths` in the agent's config).
-Implementations live in
+`read`, `list`, and `search` are read-only filesystem primitives; `edit`,
+`move`, `copy`, `delete`, `chmod`, and `chown` are writing ones. Unlike
+`exec` (gated by a command allowlist) they're all gated on the agent side by
+a **path allowlist** (`file_ops` in the agent's config), where each path
+declares an `r` or `rw` access level — read-only ops need `r`, writing ops
+need `rw`. Destructive ops that overwrite or remove an existing target
+report a `backup` path. Implementations live in
 [`sentinelx-cloud-core`](https://github.com/pensados/sentinelx-cloud-core)
-under `handlers/fileops.py`; see that repo's README for the security model.
+under `handlers/`; see that repo's README and `THREAT_MODEL.md` for the
+security model.
 
 ## Python bindings
 
