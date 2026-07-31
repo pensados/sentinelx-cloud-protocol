@@ -53,6 +53,31 @@ OpType = Literal[
 
 # --- Host info -----------------------------------------------------------------
 
+class ConfigSummary(BaseModel):
+    """Counts summarizing a host's policy — safe to expose to admins.
+
+    These are aggregates only (how many, not which), so they reveal a
+    host's posture (a power user with 100+ commands vs a locked-down new
+    install) without leaking the actual command list, paths, or service
+    names. The full lists stay on the host and are only shown to the host's
+    own owner through a separate on-demand channel, never in this hello.
+
+    All fields optional so an older hub that somehow receives this (or a
+    partial summary) degrades gracefully.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    allowed_command_count: int | None = None
+    file_ops_path_count: int | None = None
+    file_ops_rw_count: int | None = None
+    service_count: int | None = None
+    playbook_count: int | None = None
+    trusted_fetch_host_count: int | None = None
+    exec_timeout_default: int | None = None
+    exec_timeout_max: int | None = None
+
+
 class HostInfo(BaseModel):
     """Information about the host where sentinelx-core is running."""
 
@@ -63,6 +88,9 @@ class HostInfo(BaseModel):
     os: str = "linux"
     kernel: str | None = None
     arch: str | None = None
+    # Policy summary (counts only). Optional: older agents omit it, and the
+    # hub treats a missing summary as "unknown" rather than an error.
+    config_summary: ConfigSummary | None = None
 
 
 # --- Connection lifecycle ------------------------------------------------------
