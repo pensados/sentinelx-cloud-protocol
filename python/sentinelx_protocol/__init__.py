@@ -9,11 +9,11 @@ HEARTBEAT_INTERVAL_SECONDS = 30
 HEARTBEAT_TIMEOUT_SECONDS = 90
 
 from sentinelx_protocol.messages import (
+    ConfigSummary,
     ErrorMessage,
     EventMessage,
     HelloMessage,
     HostInfo,
-    ConfigSummary,
     PingMessage,
     PongMessage,
     RequestMessage,
