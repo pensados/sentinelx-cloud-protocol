@@ -5,6 +5,24 @@ All notable changes to the SentinelX protocol will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-08-01
+
+### Added
+- `read_audit` operation (read-only). Returns recent entries from the agent's
+  own on-host audit log at `/var/lib/sentinelx/audit.jsonl`, which records
+  each executed operation together with its payload. This is the only place
+  the actual command/payload is retained; it never leaves the host except in
+  response to this op, and entries are returned as-is (no redaction) since the
+  log is the host owner's own record. Backward compatible: older agents don't
+  advertise or handle the op, and older hubs simply never request it.
+
+## [1.3.0] - 2026-05-16
+
+### Added
+- `ConfigSummary` on `HostInfo`, reported by the agent in its hello handshake.
+  (This entry documents a version that shipped without a changelog note at the
+  time; recorded here retroactively for completeness.)
+
 ## [1.2.0] - 2026-05-17
 
 ### Added

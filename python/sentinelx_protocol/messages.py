@@ -37,6 +37,13 @@ OpType = Literal[
     "read",
     "list",
     "search",
+    # Local audit log (Story C) — read-only. Returns recent entries from the
+    # agent's own on-host audit log (/var/lib/sentinelx/audit.jsonl), which
+    # records each executed op WITH its payload. Unlike the hub's metadata
+    # ring buffer, this is the only place the actual command/payload lives,
+    # and it never leaves the host except in response to this op. Metadata is
+    # returned as-is (no redaction) — the log is the host owner's own record.
+    "read_audit",
     # Mutating filesystem ops (file-ops unificadas). These resolve ONLY
     # under a file_ops path declared access: rw on the agent side. The
     # agent canonicalizes the path (symlinks included) before checking,
