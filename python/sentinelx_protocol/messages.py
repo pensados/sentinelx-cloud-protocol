@@ -95,6 +95,14 @@ class HostInfo(BaseModel):
     os: str = "linux"
     kernel: str | None = None
     arch: str | None = None
+    # Machine details (optional; older agents omit them). Gathered
+    # best-effort at connect; any field the agent cannot determine is None.
+    cpu_model: str | None = None
+    cpu_cores: int | None = None
+    mem_total_bytes: int | None = None
+    disk_total_bytes: int | None = None
+    machine_type: str | None = None  # physical | vm | container | wsl
+    distro: str | None = None
     # Policy summary (counts only). Optional: older agents omit it, and the
     # hub treats a missing summary as "unknown" rather than an error.
     config_summary: ConfigSummary | None = None
