@@ -118,6 +118,9 @@ class HelloMessage(BaseModel):
     type: Literal["hello"] = "hello"
     protocol_version: str
     agent_version: str
+    # Self-declared implementation name (e.g. 'sentinelx-core', 'SU24').
+    # Optional: older agents omit it and the hub treats it as the default.
+    agent_name: str | None = None
     host: HostInfo
     capabilities: list[str] = Field(default_factory=list)
 
