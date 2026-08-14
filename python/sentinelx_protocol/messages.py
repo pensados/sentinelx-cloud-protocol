@@ -37,6 +37,8 @@ OpType = Literal[
     "read",
     "list",
     "search",
+    # Deterministic, read-only project orientation (git + fs aggregation).
+    "project_snapshot",
     # Local audit log (Story C) — read-only. Returns recent entries from the
     # agent's own on-host audit log (/var/lib/sentinelx/audit.jsonl), which
     # records each executed op WITH its payload. Unlike the hub's metadata
