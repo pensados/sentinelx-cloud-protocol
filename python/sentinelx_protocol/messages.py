@@ -57,6 +57,21 @@ OpType = Literal[
     "delete",
     "chmod",
     "chown",
+    # Cross-host file transfer (binary streaming relay through the Hub).
+    # INTERNAL agent ops driven by the Hub's `sentinel_transfer_file`
+    # coordinator; NOT exposed as model-visible MCP tools. The Hub resolves
+    # both the source and destination sessions for the authenticated user and
+    # relays raw binary WebSocket frames between them, chunk by chunk with
+    # backpressure (it awaits the destination's ack before pulling the next
+    # source chunk). `file_export_init` stats the source (size + sha256 +
+    # filename), gated by file_ops READ access; `file_export_chunk` streams one
+    # raw binary frame per chunk (see sentinelx_protocol.binary framing);
+    # `file_export_complete` tears down the source-side export session.
+    # Backward compatible: older agents don't advertise or handle these, and
+    # the Hub only drives a transfer when BOTH hosts advertise them.
+    "file_export_init",
+    "file_export_chunk",
+    "file_export_complete",
 ]
 
 

@@ -5,6 +5,30 @@ All notable changes to the SentinelX protocol will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-08-15
+
+### Added
+- Cross-host file transfer: binary streaming relay through the Hub.
+  - New INTERNAL agent operations `file_export_init`, `file_export_chunk`, and
+    `file_export_complete` (source side). Driven by the Hub's
+    `sentinel_transfer_file` coordinator; NOT exposed as model-visible MCP
+    tools. `file_export_init` stats the source file (size + sha256 + filename)
+    gated by the existing file_ops READ allowlist; `file_export_chunk` streams
+    one raw binary frame per chunk; `file_export_complete` tears down the
+    source-side export session.
+  - New binary transport dimension (`sentinelx_protocol.binary`): control
+    messages stay JSON text frames, file bytes travel as WebSocket **binary**
+    frames on the same connection. Self-describing mini-framing
+    `[transfer_id: 16B][chunk_index: 4B uint32 BE][payload]` routes a raw frame
+    to its transfer/chunk without an interleaved control message. Constants:
+    `TRANSFER_CHUNK_BYTES` (1 MiB payload), `BINARY_HEADER_BYTES` (20),
+    `MAX_BINARY_FRAME_BYTES` (2 MiB — the WS frame ceiling the agent/hub must
+    allow, above chunk+header for headroom).
+  - Capability advertisement is additive: the Hub only relays a transfer when
+    BOTH source and destination advertise binary-transfer support. Backward
+    compatible — older agents don't advertise/handle the ops, older hubs never
+    request them. Protocol MAJOR stays 1, so 1.7.0 agents keep connecting.
+
 ## [1.7.0] - 2026-08-14
 
 ### Added

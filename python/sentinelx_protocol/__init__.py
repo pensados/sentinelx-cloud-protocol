@@ -1,6 +1,6 @@
 """SentinelX wire protocol — shared between core and hub."""
 
-PROTOCOL_VERSION = "1.7.0"
+PROTOCOL_VERSION = "1.8.0"
 PROTOCOL_MAJOR = 1
 
 MAX_FRAME_BYTES = 1_048_576  # 1 MB
@@ -22,6 +22,17 @@ from sentinelx_protocol.messages import (
     WelcomeMessage,
     parse_message,
 )
+from sentinelx_protocol.binary import (
+    BINARY_HEADER_BYTES,
+    MAX_BINARY_FRAME_BYTES,
+    TRANSFER_CHUNK_BYTES,
+    TRANSFER_ID_BYTES,
+    BinaryFrame,
+    BinaryFrameError,
+    decode_binary_frame,
+    encode_binary_frame,
+    is_binary_transfer_frame,
+)
 
 __all__ = [
     "PROTOCOL_VERSION",
@@ -42,4 +53,14 @@ __all__ = [
     "EventMessage",
     "ErrorMessage",
     "parse_message",
+    # binary transfer framing (cross-host file transfer)
+    "BINARY_HEADER_BYTES",
+    "MAX_BINARY_FRAME_BYTES",
+    "TRANSFER_CHUNK_BYTES",
+    "TRANSFER_ID_BYTES",
+    "BinaryFrame",
+    "BinaryFrameError",
+    "decode_binary_frame",
+    "encode_binary_frame",
+    "is_binary_transfer_frame",
 ]
