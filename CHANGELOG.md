@@ -5,6 +5,23 @@ All notable changes to the SentinelX protocol will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-08-14
+
+### Added
+- `project_snapshot` operation (read-only). Returns a bounded, deterministic
+  summary of a project/repository in a single call: git state (branch, HEAD,
+  detached, dirty, ahead/behind), change stats (staged/unstaged/untracked
+  counts, insertions/deletions), and repository facts (tracked-file count,
+  top-level directories, and file-extension counts). For a non-git but readable
+  directory it returns a plain filesystem summary (`kind: "directory"`) instead
+  of failing. The op aggregates work a client would otherwise do with several
+  `list`/`read`/`search`/`exec(git …)` round-trips, reducing tool-call and
+  context overhead — it adds no new capability, only a compact, deterministic
+  shape. Reuses the existing file-ops path allowlist and read-only semantics;
+  the git root reported by the repository is re-validated against the allowlist
+  before use. Backward compatible: older agents don't advertise or handle the
+  op, and older hubs simply never request it.
+
 ## [1.4.0] - 2026-08-01
 
 ### Added
