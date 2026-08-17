@@ -5,6 +5,20 @@ All notable changes to the SentinelX protocol will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-08-17
+
+### Added
+- `preferred_profile` optional field on `HelloMessage` (`"compact" | "full" |
+  None`). Lets an agent advertise which MCP toolset profile it prefers. It is
+  **advisory**: the hub applies it only as a default when the user has set no
+  explicit profile, and only when ALL of that user's connected agents agree
+  (unanimity; a non-advertising agent counts as `full`). Stock sentinelx-core
+  leaves it `None`; third-party agents (e.g. SU24) may set `"compact"`.
+  Additive and backward compatible — older agents omit the field (parsed as
+  `None`). `HelloMessage` is `extra="forbid"`, so a hub must run 1.10.0 to
+  accept a hello carrying this field: deploy the hub before agents advertise
+  it. Protocol MAJOR stays 1, so 1.9.0 agents keep connecting.
+
 ## [1.9.0] - 2026-08-17
 
 ### Added

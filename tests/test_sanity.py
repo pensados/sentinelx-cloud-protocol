@@ -76,3 +76,45 @@ def test_request_message_parses_new_ops() -> None:
         parsed = parse_message(msg.model_dump(mode="json"))
         assert isinstance(parsed, RequestMessage)
         assert parsed.op == op
+
+
+def test_hello_preferred_profile_optional_and_validated() -> None:
+    """HelloMessage.preferred_profile (protocol 1.10.0) is optional, defaults
+    to None, and only accepts the two known profile values.
+
+    It's an advisory toolset-profile hint. Older agents omit it (parsed as
+    None); a valid hello may carry "compact" or "full"; anything else is
+    rejected. Guards the wire contract the hub's resolve_profile relies on.
+    """
+    import pytest
+    from pydantic import ValidationError
+
+    from sentinelx_protocol.messages import HelloMessage, parse_message
+
+    host = {"id": "h1", "hostname": "test-host"}
+
+    # Old-style hello: no field -> None (backward compatible).
+    legacy = HelloMessage(protocol_version="1.9.0", agent_version="0.8.0", host=host)
+    assert legacy.preferred_profile is None
+
+    # New hello advertising a preference parses and round-trips the parser.
+    for profile in ("compact", "full"):
+        msg = HelloMessage(
+            protocol_version="1.10.0",
+            agent_version="0.8.0",
+            host=host,
+            preferred_profile=profile,
+        )
+        assert msg.preferred_profile == profile
+        parsed = parse_message(msg.model_dump(mode="json"))
+        assert isinstance(parsed, HelloMessage)
+        assert parsed.preferred_profile == profile
+
+    # An unknown profile value is rejected by the Literal.
+    with pytest.raises(ValidationError):
+        HelloMessage(
+            protocol_version="1.10.0",
+            agent_version="0.8.0",
+            host=host,
+            preferred_profile="tiny",
+        )

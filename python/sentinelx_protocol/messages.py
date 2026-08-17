@@ -144,6 +144,13 @@ class HelloMessage(BaseModel):
     agent_name: str | None = None
     host: HostInfo
     capabilities: list[str] = Field(default_factory=list)
+    # Agent's preferred MCP toolset profile, advisory. The hub uses it only
+    # as a default when the user has set no explicit profile, and only when
+    # ALL of that user's connected agents agree (unanimity — see the hub's
+    # resolve_profile). Omitted (None) by agents that don't care: stock
+    # sentinelx-core leaves it None and gets the full catalog; third-party
+    # agents (e.g. SU24) can set "compact".
+    preferred_profile: Literal["compact", "full"] | None = None
 
 
 class WelcomeMessage(BaseModel):
