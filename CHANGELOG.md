@@ -5,6 +5,16 @@ All notable changes to the SentinelX protocol will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-08-17
+
+### Added
+- `git` operation (`sentinel_git`). Structured Git operations dispatched
+  agent-side: `diff` (read-only, gated by the file_ops READ allowlist) and
+  `apply_patch` (mutating, gated by file_ops RW). Additive and backward
+  compatible — older agents simply do not advertise or handle the op, and
+  older hubs never request it. Protocol MAJOR stays 1, so 1.8.0 agents keep
+  connecting.
+
 ## [1.8.0] - 2026-08-15
 
 ### Added
