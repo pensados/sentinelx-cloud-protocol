@@ -57,6 +57,10 @@ OpType = Literal[
     "delete",
     "chmod",
     "chown",
+    # Structured Git operations (sentinel_git): diff (read) + apply_patch (rw),
+    # dispatched agent-side by handlers/git_ops.py. Additive, backward-compatible:
+    # older agents simply do not advertise or handle it.
+    "git",
     # Cross-host file transfer (binary streaming relay through the Hub).
     # INTERNAL agent ops driven by the Hub's `sentinel_transfer_file`
     # coordinator; NOT exposed as model-visible MCP tools. The Hub resolves

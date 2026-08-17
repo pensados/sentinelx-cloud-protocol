@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sentinelx-cloud-protocol"
-version = "1.8.0"
+version = "1.9.0"
 description = "SentinelX wire protocol — shared contract between core and hub"
 readme = "README.md"
 requires-python = ">=3.11"
