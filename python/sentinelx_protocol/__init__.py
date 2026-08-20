@@ -34,6 +34,14 @@ from sentinelx_protocol.binary import (
     is_binary_transfer_frame,
 )
 
+from sentinelx_protocol.bounding import (
+    RESPONSE_SOFT_LIMIT_BYTES,
+    RESPONSE_HEAD_RATIO,
+    TRUNCATION_KEY,
+    bound_response,
+    serialized_size,
+)
+
 __all__ = [
     "PROTOCOL_VERSION",
     "PROTOCOL_MAJOR",
@@ -53,6 +61,12 @@ __all__ = [
     "EventMessage",
     "ErrorMessage",
     "parse_message",
+    # response bounding (issue #24, repro C)
+    "RESPONSE_SOFT_LIMIT_BYTES",
+    "RESPONSE_HEAD_RATIO",
+    "TRUNCATION_KEY",
+    "bound_response",
+    "serialized_size",
     # binary transfer framing (cross-host file transfer)
     "BINARY_HEADER_BYTES",
     "MAX_BINARY_FRAME_BYTES",

@@ -5,6 +5,21 @@ All notable changes to the SentinelX protocol will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] - 2026-08-20
+
+### Added
+- `bounding` module: `bound_response()`, plus `RESPONSE_SOFT_LIMIT_BYTES`
+  (128 KiB), `RESPONSE_HEAD_RATIO`, `TRUNCATION_KEY`, and `serialized_size()`.
+  Shared response-payload bounding for core and hub (issue #24, repro C):
+  truncates the largest string leaves in an oversized `result` (keeping a
+  head+tail slice) and attaches truncation metadata (`response_truncated`,
+  `original_bytes`, `delivered_bytes`, `continuation_available=False`,
+  `execution_status`) so an executed operation is never turned into a
+  delivery failure (WebSocket 1009 "message too big"). Purely additive:
+  **no wire/message change**, so `PROTOCOL_VERSION` stays `1.10.0` and older
+  agents/hubs keep connecting; the package version is bumped so core and hub
+  can pin the helper via git tag.
+
 ## [1.10.0] - 2026-08-17
 
 ### Added
