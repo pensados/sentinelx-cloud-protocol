@@ -176,6 +176,22 @@ class RequestMessage(BaseModel):
     op: OpType
     payload: dict[str, Any] = Field(default_factory=dict)
     deadline: datetime | None = None
+    opaque_ref: str | None = Field(
+        default=None,
+        max_length=256,
+        description=(
+            "Caller-supplied correlation value. The hub assigns it no meaning: "
+            "it never routes, indexes or searches on this, it only carries it "
+            "here and records it in the audit. An agent may use it to resolve "
+            "its own durable logical context. Bounded because it crosses the "
+            "wire on every call that sets it and lands in the audit log."
+        ),
+    )
+    # NOTE: this model is extra="forbid", so an agent that predates this field
+    # REJECTS a message carrying it -- its read loop logs a warning and drops
+    # the frame, which the hub sees as a call that never answers. The hub must
+    # therefore only send this to an agent that advertises the matching
+    # capability. See sentinelx_hub.hub.session.call.
 
 
 class ResponseError(BaseModel):
