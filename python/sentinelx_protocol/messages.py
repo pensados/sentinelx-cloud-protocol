@@ -76,6 +76,10 @@ OpType = Literal[
     "file_export_init",
     "file_export_chunk",
     "file_export_complete",
+    # Generic bridge to a host-local structured endpoint (core#45). Only
+    # registered by an agent whose config declares `local_apis`, so an agent
+    # that did not opt in simply has no handler for it.
+    "local_api",
 ]
 
 
