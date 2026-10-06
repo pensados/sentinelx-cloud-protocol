@@ -71,51 +71,81 @@ def test_multiple_large_strings_small_preserved():
     assert out["result"]["n"] == 42
 
 
-def test_a_long_list_is_trimmed_with_a_marker():
-    # Was the wholesale safety net before 1.13.1: a list is now trimmed instead.
+def test_a_long_list_is_trimmed_and_listed_in_the_metadata():
+    # The wholesale safety net before 1.13.1; since 1.13.2 nothing is inserted
+    # into the list: what was left out is in _truncation["omitted"].
     r = {"type": "response", "id": "f", "ok": True,
          "result": {"nums": list(range(200_000))}}
     out, meta = bound_response(r)
     assert _env(out) <= SOFT
-    assert out["result"][TRUNCATION_KEY]["response_truncated"] is True
-    assert "note" not in out["result"]
     nums = out["result"]["nums"]
+    assert "note" not in out["result"] and all(isinstance(x, int) for x in nums)
     assert nums[:3] == [0, 1, 2]
-    omitted = int(nums[-1].split("sentinelx: ")[1].split(" more")[0])
-    assert len(nums) - 1 + omitted == 200_000
+    (entry,) = meta["omitted"]
+    assert entry["path"] == "/nums" and entry["kept"] == len(nums)
+    assert entry["kept"] + entry["omitted"] == 200_000
 
 
-def test_a_capabilities_like_result_keeps_its_small_keys():
-    # The 2026-10-06 case: ~166 KB of capabilities detail=full, mostly lists of
-    # small entries, used to come back as a bare note.
-    playbooks = [{"name": f"pb-{i}", "description": "d" * 60, "steps": [f"step {j}" for j in range(4)]}
-                 for i in range(1500)]
-    ops = [f"op_{i}" for i in range(40)]
-    r = {"type": "response", "id": "c", "ok": True,
-         "result": {"agent_version": "0.23.1", "ops_supported": ops, "playbooks": playbooks}}
+def _capabilities_like():
+    # The real shape of an agent's capabilities detail=full: services, locations
+    # and playbooks are dicts keyed by name (sxrep_95SMJC6TJ0CE: 393 services).
+    services = {f"svc-{i}": {"unit": f"svc-{i}.service", "backend": "service",
+                             "actions": ["status", "restart"], "requires_sudo": True,
+                             "description": "d" * 150} for i in range(400)}
+    playbooks = {f"pb-{i}": {"description": "p" * 200, "steps": [f"step {j} " + "s" * 60 for j in range(40)]}
+                 for i in range(13)}
+    tooling = {f"tool-{i}": {"doc": "t" * 4000} for i in range(7)}
+    return {"agent": "sentinelx-cloud-core", "version": "0.23.10",
+            "host": {"hostname": "zen", "arch": "x86_64"},
+            "ops_supported": [f"op_{i}" for i in range(40)],
+            "allowed_commands": ["ls", "cat", "systemctl"],
+            "services": services, "playbooks": playbooks, "tooling": tooling}
+
+
+def test_a_dict_heavy_capabilities_result_is_trimmed_not_dropped():
+    res = _capabilities_like()
+    r = {"type": "response", "id": "c", "ok": True, "result": res}
     assert _env(r) > SOFT
     out, meta = bound_response(r)
-    res = out["result"]
-    assert _env(out) <= SOFT and "note" not in res
-    assert res["agent_version"] == "0.23.1" and res["ops_supported"] == ops
-    assert isinstance(res["playbooks"][-1], str) and "more items omitted" in res["playbooks"][-1]
-    assert res["playbooks"][0]["name"] == "pb-0"
+    got = out["result"]
+    assert _env(out) <= SOFT and "note" not in got
+    assert got["version"] == "0.23.10" and got["host"]["hostname"] == "zen"
+    assert len(got["ops_supported"]) == 40 and got["allowed_commands"] == ["ls", "cat", "systemctl"]
+    assert isinstance(got["services"], dict) and 0 < len(got["services"]) < 400
+    assert list(got["services"])[0] == "svc-0"
+    paths = {e["path"]: e for e in meta["omitted"]}
+    assert "/services" in paths and paths["/services"]["kept"] + paths["/services"]["omitted"] == 400
 
 
-def test_trimming_a_list_twice_accumulates_the_count():
-    from sentinelx_protocol.bounding import _trim_list
-    once = _trim_list(list(range(100)), 50)
-    twice = _trim_list(once, 20)
-    assert len(twice) == 21 and twice[-1].startswith("\u2026[sentinelx: 80 ")
-
-
-def test_the_heavier_of_a_string_and_a_list_goes_first():
-    r = {"type": "response", "id": "h", "ok": True,
-         "result": {"log": "x" * 200_000, "items": list(range(10_000))}}
+def test_trimmed_containers_keep_their_item_types():
+    objs = [{"id": i, "v": "x" * 100} for i in range(5000)]
+    r = {"type": "response", "id": "t", "ok": True, "result": {"objs": objs}}
     out, meta = bound_response(r)
+    assert all(isinstance(o, dict) for o in out["result"]["objs"])
+
+
+def test_a_container_trimmed_twice_keeps_its_original_total():
+    from sentinelx_protocol.bounding import _shrink_largest
+    root = {"a": list(range(5000)), "b": "y" * 10}
+    env = {"result": root}
+    omitted = {}
+    assert _shrink_largest(root, 1500, env, omitted)
+    entry = omitted[("a",)]
+    assert entry["total"] == 5000 and entry["kept"] == len(root["a"])
+
+
+def test_the_omitted_list_is_capped():
+    import sentinelx_protocol.bounding as bnd
+    saved = bnd._OMITTED_MAX_ENTRIES
+    bnd._OMITTED_MAX_ENTRIES = 1
+    try:
+        r = {"type": "response", "id": "m", "ok": True,
+             "result": {"a": list(range(100_000)), "b": list(range(100_000))}}
+        out, meta = bound_response(r)
+    finally:
+        bnd._OMITTED_MAX_ENTRIES = saved
     assert _env(out) <= SOFT
-    assert out["result"]["items"] == list(range(10_000))          # the lighter list untouched
-    assert "truncated" in out["result"]["log"]
+    assert len(meta["omitted"]) == 1 and meta["omitted_more"] == 1
 
 
 def test_untrimmable_bloat_still_falls_back_to_a_note():

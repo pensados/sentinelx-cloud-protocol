@@ -5,6 +5,29 @@ All notable changes to the SentinelX protocol will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.13.2 - Bounding trims dicts too, and records omissions in the metadata - 2026-10-06
+
+- 1.13.1 did not fix the case it was written for. A real capabilities detail=full
+  keeps services, locations and playbooks as dicts keyed by name, and 1.13.1 only
+  trimmed strings and lists, so a host with a large config still got the wholesale
+  note (sxrep_95SMJC6TJ0CE: 393 services, 166,511 -> 308 bytes). Its test used a
+  list of playbooks, a shape the agent never produces.
+- Each pass now trims the heaviest of the largest string, list or dict below the
+  result (never the result itself, so its small keys always arrive). Lists and
+  dicts keep their first entries (dicts in insertion order).
+- Nothing is inserted into a trimmed container any more: 1.13.1's in-list marker
+  string changed a list of objects into a mixed list. What was left out is listed in
+  _truncation['omitted'] as [{'path': <JSON Pointer>, 'kept': n, 'omitted': m}],
+  largest first, capped at 20 entries plus 'omitted_more'. A container trimmed in
+  several passes keeps its original total; paths removed by trimming a parent are
+  dropped. The wholesale note remains only for bloat in the result's own keys.
+- Verified with the real shape: the agent's capabilities handler with 400 services
+  and 13 large playbooks builds a 171 KB response; 1.13.0 and 1.13.1 deliver a 276-byte
+  note, 1.13.2 delivers it within 128 KiB with every top-level key and services as a
+  dict (agent test test_capabilities_full_is_bounded.py).
+- Tests: 1.13.1's marker tests moved to the new contract; 5 new tests; 5 sabotages
+  caught.
+
 ## 1.13.1 - Bounding trims long lists instead of dropping the whole result - 2026-10-06
 
 - bound_response could only shorten strings. A result whose bulk was lists of small
