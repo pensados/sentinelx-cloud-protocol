@@ -5,6 +5,24 @@ All notable changes to the SentinelX protocol will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.13.1 - Bounding trims long lists instead of dropping the whole result - 2026-10-06
+
+- bound_response could only shorten strings. A result whose bulk was lists of small
+  entries (a capabilities detail=full of ~166 KB: playbooks, services, commands) had
+  nothing to shorten string by string, so the safety net replaced the whole result
+  with 'result omitted: too large to bound field-wise', while ok stayed true. Seen
+  in production on 5 users in a week, one of them 311 times (sxrep_W0RW3FVD97RJ).
+- Each pass now trims whichever weighs more, the largest string or the largest list.
+  A list keeps its first items and ends with a marker,
+  '\u2026[sentinelx: N more items omitted]\u2026', whose count accumulates if the list
+  is trimmed again. The wholesale note remains only for bloat neither can reach
+  (e.g. a dict with a huge number of small keys).
+- The bounding happens in the agent before it sends a response, so agents need this
+  version to benefit; the protocol version is not compared at handshake, so mixed
+  1.13.0/1.13.1 hubs and agents keep working.
+- Tests: the old safety-net test moved to the new contract (a long list is trimmed);
+  4 new tests; 3 sabotages caught.
+
 ## [1.11.0] - 2026-08-20
 
 ### Added

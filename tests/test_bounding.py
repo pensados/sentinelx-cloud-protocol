@@ -71,13 +71,59 @@ def test_multiple_large_strings_small_preserved():
     assert out["result"]["n"] == 42
 
 
-def test_safety_net_non_string_bloat():
+def test_a_long_list_is_trimmed_with_a_marker():
+    # Was the wholesale safety net before 1.13.1: a list is now trimmed instead.
     r = {"type": "response", "id": "f", "ok": True,
          "result": {"nums": list(range(200_000))}}
     out, meta = bound_response(r)
     assert _env(out) <= SOFT
     assert out["result"][TRUNCATION_KEY]["response_truncated"] is True
-    assert "note" in out["result"]
+    assert "note" not in out["result"]
+    nums = out["result"]["nums"]
+    assert nums[:3] == [0, 1, 2]
+    omitted = int(nums[-1].split("sentinelx: ")[1].split(" more")[0])
+    assert len(nums) - 1 + omitted == 200_000
+
+
+def test_a_capabilities_like_result_keeps_its_small_keys():
+    # The 2026-10-06 case: ~166 KB of capabilities detail=full, mostly lists of
+    # small entries, used to come back as a bare note.
+    playbooks = [{"name": f"pb-{i}", "description": "d" * 60, "steps": [f"step {j}" for j in range(4)]}
+                 for i in range(1500)]
+    ops = [f"op_{i}" for i in range(40)]
+    r = {"type": "response", "id": "c", "ok": True,
+         "result": {"agent_version": "0.23.1", "ops_supported": ops, "playbooks": playbooks}}
+    assert _env(r) > SOFT
+    out, meta = bound_response(r)
+    res = out["result"]
+    assert _env(out) <= SOFT and "note" not in res
+    assert res["agent_version"] == "0.23.1" and res["ops_supported"] == ops
+    assert isinstance(res["playbooks"][-1], str) and "more items omitted" in res["playbooks"][-1]
+    assert res["playbooks"][0]["name"] == "pb-0"
+
+
+def test_trimming_a_list_twice_accumulates_the_count():
+    from sentinelx_protocol.bounding import _trim_list
+    once = _trim_list(list(range(100)), 50)
+    twice = _trim_list(once, 20)
+    assert len(twice) == 21 and twice[-1].startswith("\u2026[sentinelx: 80 ")
+
+
+def test_the_heavier_of_a_string_and_a_list_goes_first():
+    r = {"type": "response", "id": "h", "ok": True,
+         "result": {"log": "x" * 200_000, "items": list(range(10_000))}}
+    out, meta = bound_response(r)
+    assert _env(out) <= SOFT
+    assert out["result"]["items"] == list(range(10_000))          # the lighter list untouched
+    assert "truncated" in out["result"]["log"]
+
+
+def test_untrimmable_bloat_still_falls_back_to_a_note():
+    r = {"type": "response", "id": "u", "ok": True,
+         "result": {f"k{i}": i for i in range(40_000)}}
+    out, meta = bound_response(r)
+    assert _env(out) <= SOFT
+    assert "note" in out["result"] and out["result"][TRUNCATION_KEY]["response_truncated"] is True
 
 
 def test_nested_string_truncated():

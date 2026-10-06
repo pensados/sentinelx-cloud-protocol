@@ -5,7 +5,11 @@ frame. The transport then closes with code 1009 ("message too big") and the
 response is lost even though the operation already executed. This module bounds
 an outbound response *before* it is sent, so an executed operation is never
 turned into a delivery failure: it truncates the largest string leaves inside
-``result`` (keeping a head and a tail) and attaches truncation metadata.
+``result`` (keeping a head and a tail) and the longest lists (keeping their first
+items, plus a marker naming how many were left out), and attaches truncation
+metadata. Lists were added in 1.13.1: a capabilities detail=full of ~166 KB whose
+bulk was lists of small entries could not be trimmed string by string, so the
+whole result was replaced by a note (5 users, one of them 311 times in a week).
 
 Contract (mirrors the existing fileops ``truncated`` precedent)::
 
@@ -88,6 +92,61 @@ def _truncate_text(text: str, keep_bytes: int) -> str:
     return head + _marker(omitted) + tail
 
 
+_LIST_MARKER_PREFIX = "\u2026[sentinelx: "
+_LIST_MARKER_SUFFIX = " more items omitted]\u2026"
+
+
+def _list_marker(omitted: int) -> str:
+    return f"{_LIST_MARKER_PREFIX}{omitted}{_LIST_MARKER_SUFFIX}"
+
+
+def _omitted_in(lst: list) -> int:
+    """Items already left out of ``lst`` by an earlier pass (its marker), else 0."""
+    if lst and isinstance(lst[-1], str) and lst[-1].startswith(_LIST_MARKER_PREFIX) \
+            and lst[-1].endswith(_LIST_MARKER_SUFFIX):
+        try:
+            return int(lst[-1][len(_LIST_MARKER_PREFIX):-len(_LIST_MARKER_SUFFIX)])
+        except ValueError:
+            return 0
+    return 0
+
+
+def _largest_list_ref(node: Any):
+    """Return ``(container, key, serialized_size)`` of the largest list reachable
+    below ``node`` that still has items to drop (two or more real items), or
+    ``None``. Iterative DFS, like :func:`_largest_string_ref`."""
+    best = None
+    stack = [node]
+    while stack:
+        cur = stack.pop()
+        if isinstance(cur, dict):
+            items = cur.items()
+        elif isinstance(cur, list):
+            items = enumerate(cur)
+        else:
+            continue
+        for key, val in items:
+            if isinstance(val, list):
+                real = len(val) - (1 if _omitted_in(val) else 0)
+                if real >= 2:
+                    n = serialized_size(val)
+                    if best is None or n > best[2]:
+                        best = (cur, key, n)
+                stack.append(val)
+            elif isinstance(val, dict):
+                stack.append(val)
+    return best
+
+
+def _trim_list(lst: list, keep: int) -> list:
+    """The first ``keep`` real items of ``lst`` and a marker with the running
+    total of items left out."""
+    already = _omitted_in(lst)
+    real = lst[:-1] if already else lst
+    keep = max(1, min(keep, len(real) - 1))
+    return real[:keep] + [_list_marker(already + len(real) - keep)]
+
+
 def _largest_string_ref(node: Any):
     """Return ``(container, key, raw_utf8_len)`` of the largest truncatable
     string leaf reachable from ``node`` (descending dicts and lists), or
@@ -113,18 +172,26 @@ def _largest_string_ref(node: Any):
 
 
 def _shrink_largest(root: Any, budget: int, envelope: dict) -> bool:
-    """Proportionally shrink the largest string leaf under ``root`` so the whole
-    ``envelope`` trends toward ``budget``. Proportional (not byte-subtractive)
-    so it converges for non-ASCII too, where JSON escaping makes serialized cost
-    differ from raw UTF-8 length. Returns False when nothing is left to trim."""
+    """Proportionally shrink the largest string leaf or list under ``root``,
+    whichever weighs more, so the whole ``envelope`` trends toward ``budget``.
+    Proportional (not byte-subtractive) so it converges for non-ASCII too, where
+    JSON escaping makes serialized cost differ from raw UTF-8 length. Returns
+    False when nothing is left to trim."""
     for _ in range(_MAX_PASSES):
         cur = serialized_size(envelope)
         if cur <= budget:
             return True
-        ref = _largest_string_ref(root)
-        if ref is None:
+        sref = _largest_string_ref(root)
+        lref = _largest_list_ref(root)
+        if sref is None and lref is None:
             return False
-        container, key, n = ref
+        if lref is not None and (sref is None or lref[2] > sref[2]):
+            container, key, _n = lref
+            lst = container[key]
+            real = len(lst) - (1 if _omitted_in(lst) else 0)
+            container[key] = _trim_list(lst, int(real * (budget / cur) * _SHRINK_SLACK))
+            continue
+        container, key, n = sref
         keep = int(n * (budget / cur) * _SHRINK_SLACK)
         keep = max(_MIN_TRUNCATABLE, min(keep, n - 1))
         container[key] = _truncate_text(container[key], keep)
@@ -159,9 +226,9 @@ def bound_response(response: dict, soft_limit: int = RESPONSE_SOFT_LIMIT_BYTES):
 
     if isinstance(result, dict):
         if not _shrink_largest(result, budget, response):
-            # Safety net: bloat we cannot trim field-wise (huge nested non-string
-            # structure). Replace result wholesale so something valid and
-            # under-limit always ships.
+            # Safety net: bloat we cannot trim string- or list-wise (e.g. a dict
+            # with a huge number of small keys). Replace result wholesale so
+            # something valid and under-limit always ships.
             result = {"note": "result omitted: too large to bound field-wise"}
             response["result"] = result
         meta = _meta()
