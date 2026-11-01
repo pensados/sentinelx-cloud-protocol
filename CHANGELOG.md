@@ -5,6 +5,16 @@ All notable changes to the SentinelX protocol will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.13.3 - bound_response trims error.message too - 2026-11-01
+
+- A response with a result dict and a large error.message stayed over the soft limit: only result was
+  trimmed, so even the fallback note left the message whole (sxrep_TRP3VXQ98XNC, Jan). The message now
+  gets at most half the budget before result is trimmed, and a final step takes any remaining excess out
+  of it, on both paths. ok/type/id/error.code are untouched. No wire-format change: 1.13.2 and 1.13.3
+  peers interoperate.
+- tests: a small result with a 400 KB message (65 KB delivered, result intact), and a large result with a
+  large message, both fit. Sabotage (no message trimming on the result path) fails them at 400,326 bytes.
+
 ## 1.13.2 - Bounding trims dicts too, and records omissions in the metadata - 2026-10-06
 
 - 1.13.1 did not fix the case it was written for. A real capabilities detail=full

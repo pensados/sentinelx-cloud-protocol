@@ -241,6 +241,10 @@ def bound_response(response: dict, soft_limit: int = RESPONSE_SOFT_LIMIT_BYTES):
         }
 
     if isinstance(result, dict):
+        # The error message counts toward the same limit: a small result next to a
+        # huge error.message used to stay over it, because only result was trimmed
+        # (sxrep_TRP3VXQ98XNC). The message gets at most half the budget first.
+        _cap_error_message(response, budget // 2)
         omitted: dict = {}
         if not _shrink_largest(result, budget, response, omitted):
             # Safety net: bloat we cannot trim string- or list-wise (e.g. a dict
@@ -260,6 +264,7 @@ def bound_response(response: dict, soft_limit: int = RESPONSE_SOFT_LIMIT_BYTES):
         while serialized_size(response) > soft_limit and meta.get("omitted"):
             meta["omitted"].pop()
             meta["omitted_more"] = meta.get("omitted_more", 0) + 1
+        _fit_error_message(response, soft_limit)
         meta["delivered_bytes"] = serialized_size(response)
         return response, meta
 
@@ -271,5 +276,29 @@ def bound_response(response: dict, soft_limit: int = RESPONSE_SOFT_LIMIT_BYTES):
     meta = _meta()
     if response.get("result") is None:
         response["result"] = {TRUNCATION_KEY: meta}
+    _fit_error_message(response, soft_limit)
     meta["delivered_bytes"] = serialized_size(response)
     return response, meta
+
+
+def _cap_error_message(response: dict, cap: int) -> None:
+    """Trim error.message (head and tail kept) to at most ``cap`` bytes."""
+    error = response.get("error")
+    if isinstance(error, dict) and isinstance(error.get("message"), str):
+        if len(error["message"].encode("utf-8")) > cap:
+            error["message"] = _truncate_text(error["message"], max(cap, _MIN_TRUNCATABLE))
+
+
+def _fit_error_message(response: dict, soft_limit: int) -> None:
+    """The last guarantee: if the envelope is still over, take the excess (and some
+    room for the marker) out of error.message. ok/type/id/error.code are untouched."""
+    error = response.get("error")
+    if not (isinstance(error, dict) and isinstance(error.get("message"), str)):
+        return
+    for _ in range(4):
+        over = serialized_size(response) - soft_limit
+        if over <= 0:
+            return
+        current = len(error["message"].encode("utf-8"))
+        keep = max(_MIN_TRUNCATABLE, current - over - 256)
+        error["message"] = _truncate_text(error["message"], keep)

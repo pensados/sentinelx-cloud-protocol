@@ -188,3 +188,30 @@ if __name__ == "__main__":
             print("FAIL", fn.__name__, "->", repr(e))
     print("\n%d/%d passed" % (len(tests) - failed, len(tests)))
     sys.exit(1 if failed else 0)
+
+
+
+from sentinelx_protocol.bounding import RESPONSE_SOFT_LIMIT_BYTES  # noqa: E402
+
+
+def _env_with_error(result, message):
+    return {"type": "response", "id": "r1", "ok": False, "result": result,
+            "error": {"code": "script_failed", "message": message}}
+
+
+def test_a_small_result_with_a_huge_error_message_fits():
+    """sxrep_TRP3VXQ98XNC: only result was trimmed, so the message kept it over."""
+    msg = "E" * 400_000
+    resp, meta = bound_response(_env_with_error({"stdout": "ok", "returncode": 1}, msg))
+    assert serialized_size(resp) <= RESPONSE_SOFT_LIMIT_BYTES
+    assert meta is not None
+    assert resp["ok"] is False and resp["type"] == "response" and resp["id"] == "r1"
+    assert resp["error"]["code"] == "script_failed"
+    assert resp["error"]["message"].startswith("EEEE") and len(resp["error"]["message"]) < len(msg)
+    assert resp["result"]["returncode"] == 1
+
+
+def test_a_huge_result_and_a_huge_error_message_both_fit():
+    resp, _ = bound_response(_env_with_error({"stdout": "o" * 400_000}, "E" * 400_000))
+    assert serialized_size(resp) <= RESPONSE_SOFT_LIMIT_BYTES
+    assert resp["error"]["code"] == "script_failed"
