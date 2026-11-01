@@ -226,6 +226,7 @@ def bound_response(response: dict, soft_limit: int = RESPONSE_SOFT_LIMIT_BYTES):
     if original <= soft_limit:
         return response, None
 
+    details_before = _details_size(response)
     budget = soft_limit - _META_RESERVE
     ok = bool(response.get("ok", False))
     execution_status = "completed" if ok else "failed"
@@ -265,6 +266,7 @@ def bound_response(response: dict, soft_limit: int = RESPONSE_SOFT_LIMIT_BYTES):
             meta["omitted"].pop()
             meta["omitted_more"] = meta.get("omitted_more", 0) + 1
         _fit_error_message(response, soft_limit)
+        _fit_details(response, soft_limit, details_before)
         meta["delivered_bytes"] = serialized_size(response)
         return response, meta
 
@@ -277,6 +279,7 @@ def bound_response(response: dict, soft_limit: int = RESPONSE_SOFT_LIMIT_BYTES):
     if response.get("result") is None:
         response["result"] = {TRUNCATION_KEY: meta}
     _fit_error_message(response, soft_limit)
+    _fit_details(response, soft_limit, details_before)
     meta["delivered_bytes"] = serialized_size(response)
     return response, meta
 
@@ -302,3 +305,37 @@ def _fit_error_message(response: dict, soft_limit: int) -> None:
         current = len(error["message"].encode("utf-8"))
         keep = max(_MIN_TRUNCATABLE, current - over - 256)
         error["message"] = _truncate_text(error["message"], keep)
+
+
+
+def _details_size(response: dict) -> int | None:
+    error = response.get("error")
+    if isinstance(error, dict) and error.get("details") is not None:
+        return serialized_size(error["details"])
+    return None
+
+
+def _fit_details(response: dict, soft_limit: int, details_before: int | None) -> None:
+    """After the message, the rest of the error (sxrep_TRP3VXQ98XNC: a rejected 300 KB
+    command came back whole in details). error.code is cut to the schema's maximum;
+    error.details is trimmed like a result, replaced by a marker if it still doesn't
+    fit, and says so whenever any step made it smaller than it was (the error-only path
+    already trimmed it, silently). ok/type/id are untouched."""
+    from sentinelx_protocol.messages import MAX_ERROR_CODE_LENGTH
+    error = response.get("error")
+    if not isinstance(error, dict):
+        return
+    code = error.get("code")
+    if isinstance(code, str) and len(code) > MAX_ERROR_CODE_LENGTH:
+        error["code"] = code[:MAX_ERROR_CODE_LENGTH]
+    details = error.get("details")
+    if details is None:
+        return
+    before = details_before if details_before is not None else serialized_size(details)
+    if serialized_size(response) > soft_limit and isinstance(details, (dict, list)):
+        _shrink_largest(details, soft_limit - _META_RESERVE, response)
+    if serialized_size(response) > soft_limit:
+        error["details"] = {"omitted": f"details too large to deliver ({before} bytes)"}
+    elif isinstance(details, dict) and serialized_size(details) < before:
+        details["truncated"] = f"details trimmed from {before} bytes"
+    _fit_error_message(response, soft_limit)

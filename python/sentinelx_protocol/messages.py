@@ -85,6 +85,12 @@ OpType = Literal[
 
 # --- Host info -----------------------------------------------------------------
 
+# Ids are UUIDs and error codes short identifiers; the limits keep a schema-valid
+# envelope from carrying a field bound_response can't trim (sxrep_TRP3VXQ98XNC).
+MAX_ID_LENGTH = 256
+MAX_ERROR_CODE_LENGTH = 128
+
+
 class ConfigSummary(BaseModel):
     """Counts summarizing a host's policy — safe to expose to admins.
 
@@ -176,7 +182,7 @@ class RequestMessage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: Literal["request"] = "request"
-    id: str
+    id: str = Field(..., max_length=MAX_ID_LENGTH)
     op: OpType
     payload: dict[str, Any] = Field(default_factory=dict)
     deadline: datetime | None = None
@@ -203,7 +209,7 @@ class ResponseError(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    code: str
+    code: str = Field(..., max_length=MAX_ERROR_CODE_LENGTH)
     message: str
     details: dict[str, Any] | None = None
 
@@ -214,7 +220,7 @@ class ResponseMessage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: Literal["response"] = "response"
-    id: str
+    id: str = Field(..., max_length=MAX_ID_LENGTH)
     ok: bool
     result: dict[str, Any] | None = None
     error: ResponseError | None = None
@@ -255,7 +261,7 @@ class ErrorMessage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: Literal["error"] = "error"
-    code: str
+    code: str = Field(..., max_length=MAX_ERROR_CODE_LENGTH)
     message: str
     fatal: bool = True
 

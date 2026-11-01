@@ -5,6 +5,16 @@ All notable changes to the SentinelX protocol will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.13.4 - 2026-11-01
+
+- bound_response also bounds the rest of the error (sxrep_TRP3VXQ98XNC, reopened): error.details is
+  trimmed like a result, and replaced by a marker if it still doesn't fit; error.code is cut to
+  MAX_ERROR_CODE_LENGTH. A rejected 300 KB command used to come back whole in details.
+- Schema: RequestMessage.id and ResponseMessage.id are at most MAX_ID_LENGTH (256) characters, and
+  ResponseError.code and ErrorMessage.code at most MAX_ERROR_CODE_LENGTH (128). Ids are UUIDs and codes
+  short identifiers, so no legitimate message changes; an envelope bound_response can't trim is no
+  longer valid. No change to the wire format.
+
 ## 1.13.3 - bound_response trims error.message too - 2026-11-01
 
 - A response with a result dict and a large error.message stayed over the soft limit: only result was
