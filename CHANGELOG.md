@@ -5,6 +5,18 @@ All notable changes to the SentinelX protocol will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.13.5 - 2026-11-01
+
+Findings of sx-review on 1.13.4:
+
+- A huge error.details next to a small result made bound_response drop the result (exit_code, stderr) and
+  keep ~124 KB of details: the result was trimmed first and could never make room. details now gets a cap
+  of its own (a quarter of the budget, as message gets half) before the result is trimmed.
+- error.code is cut to MAX_ERROR_CODE_LENGTH on every response, however small: a longer code fails
+  ResponseMessage validation and the call would go unanswered.
+- The schema test for RequestMessage.id now passes at the limit and fails only above it (it failed for
+  another reason before, so it tested nothing).
+
 ## 1.13.4 - 2026-11-01
 
 - bound_response also bounds the rest of the error (sxrep_TRP3VXQ98XNC, reopened): error.details is

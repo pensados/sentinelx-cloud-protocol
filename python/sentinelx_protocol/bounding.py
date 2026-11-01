@@ -222,6 +222,7 @@ def bound_response(response: dict, soft_limit: int = RESPONSE_SOFT_LIMIT_BYTES):
     bounding happened, else ``None``. The input is mutated in place (and also
     returned). ``ok``/``type``/``id``/``error`` are always preserved — an
     executed op is never turned into a delivery failure."""
+    _cut_error_code(response)
     original = serialized_size(response)
     if original <= soft_limit:
         return response, None
@@ -246,6 +247,9 @@ def bound_response(response: dict, soft_limit: int = RESPONSE_SOFT_LIMIT_BYTES):
         # huge error.message used to stay over it, because only result was trimmed
         # (sxrep_TRP3VXQ98XNC). The message gets at most half the budget first.
         _cap_error_message(response, budget // 2)
+        # details gets a cap of its own before the result is trimmed: otherwise the
+        # result was dropped to make room for a huge details (sx-review on 1.13.4).
+        _cap_details(response, budget // 4)
         omitted: dict = {}
         if not _shrink_largest(result, budget, response, omitted):
             # Safety net: bloat we cannot trim string- or list-wise (e.g. a dict
@@ -339,3 +343,28 @@ def _fit_details(response: dict, soft_limit: int, details_before: int | None) ->
     elif isinstance(details, dict) and serialized_size(details) < before:
         details["truncated"] = f"details trimmed from {before} bytes"
     _fit_error_message(response, soft_limit)
+
+
+def _cut_error_code(response: dict) -> None:
+    """error.code is cut to the schema's maximum on every response, however small: a
+    longer code fails ResponseMessage validation, and the call would go unanswered."""
+    from sentinelx_protocol.messages import MAX_ERROR_CODE_LENGTH
+    error = response.get("error")
+    if isinstance(error, dict) and isinstance(error.get("code"), str) and len(error["code"]) > MAX_ERROR_CODE_LENGTH:
+        error["code"] = error["code"][:MAX_ERROR_CODE_LENGTH]
+
+
+def _cap_details(response: dict, cap: int) -> None:
+    """Trim error.details to at most ``cap`` bytes (replaced by a marker if it can't be
+    trimmed that far), so the result keeps the rest of the budget."""
+    error = response.get("error")
+    if not isinstance(error, dict) or error.get("details") is None:
+        return
+    details = error["details"]
+    size = serialized_size(details)
+    if size <= cap:
+        return
+    if isinstance(details, (dict, list)):
+        _shrink_largest(details, serialized_size(response) - (size - cap), response)
+    if serialized_size(error["details"]) > cap:
+        error["details"] = {"omitted": f"details too large to deliver ({size} bytes)"}

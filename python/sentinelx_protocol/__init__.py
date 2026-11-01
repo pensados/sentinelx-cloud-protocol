@@ -1,6 +1,6 @@
 """SentinelX wire protocol — shared between core and hub."""
 
-PROTOCOL_VERSION = "1.13.4"
+PROTOCOL_VERSION = "1.13.5"
 PROTOCOL_MAJOR = 1
 
 MAX_FRAME_BYTES = 1_048_576  # 1 MB

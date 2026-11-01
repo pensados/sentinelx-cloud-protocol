@@ -37,11 +37,38 @@ def test_a_long_code_is_cut_to_the_schema_maximum():
     assert len(r["error"]["code"]) == MAX_ERROR_CODE_LENGTH and serialized_size(r) <= RESPONSE_SOFT_LIMIT_BYTES
 
 
+def _an_op():
+    import enum
+    import typing
+
+    from sentinelx_protocol.messages import OpType
+    if isinstance(OpType, type) and issubclass(OpType, enum.Enum):
+        return next(iter(OpType)).value
+    return typing.get_args(OpType)[0]
+
+
 def test_the_schema_refuses_ids_and_codes_bound_response_cannot_trim():
+    ok = {"type": "request", "id": "i" * MAX_ID_LENGTH, "op": _an_op(), "payload": {}}
+    RequestMessage.model_validate(ok)          # the limit itself is accepted
     with pytest.raises(ValidationError):
-        RequestMessage.model_validate({"type": "request", "id": "i" * (MAX_ID_LENGTH + 1), "op": "ping", "params": {}})
+        RequestMessage.model_validate({**ok, "id": "i" * (MAX_ID_LENGTH + 1)})
+    ResponseMessage.model_validate({"type": "response", "id": "i" * MAX_ID_LENGTH, "ok": True, "result": {}})
     with pytest.raises(ValidationError):
         ResponseMessage.model_validate({"type": "response", "id": "i" * (MAX_ID_LENGTH + 1), "ok": True, "result": {}})
     with pytest.raises(ValidationError):
         ResponseError.model_validate({"code": "c" * (MAX_ERROR_CODE_LENGTH + 1), "message": "m"})
-    ResponseMessage.model_validate({"type": "response", "id": "i" * MAX_ID_LENGTH, "ok": True, "result": {}})
+
+
+def test_the_result_survives_a_huge_details():
+    r, _ = bound_response(_envelope({"command": "x" * 300_000}, {"exit_code": 2, "stderr": "boom"}))
+    assert serialized_size(r) <= RESPONSE_SOFT_LIMIT_BYTES
+    assert r["result"].get("exit_code") == 2 and r["result"].get("stderr") == "boom", r["result"]
+    d = r["error"]["details"]
+    assert "truncated" in d or "omitted" in d
+
+
+def test_a_long_code_is_cut_even_in_a_small_response():
+    env = _envelope({"x": 1})
+    env["error"]["code"] = "c" * 500
+    r, _ = bound_response(env)
+    assert len(r["error"]["code"]) == MAX_ERROR_CODE_LENGTH
